@@ -45,8 +45,8 @@ minus = cond ((>= 0) . uncurry (-)) (uncurry (-)) (const 0)
 
 -- emparelha as matrizes de ambas as filiais
 allTheMatrices :: [Par (Matriz Double)]
-allTheMatrices = uncurry zip . (func >< func) $ allShifts
-    where func input = map (chunksOf 169 . uncurry joinMatrices) $ input
+allTheMatrices = uncurry zip . ((func joinMatrices) >< (func joinMatricesCost)) $ allShifts
+    where func f input = map (chunksOf 169 . uncurry f) $ input
 
 allShifts = (mp, mc')
     where (mp, mc) = (generateAllMatrices >< generateAllMatrices) $ filiais
@@ -77,6 +77,9 @@ upshift = uncurry (++) . (id >< (singl . (flip replicate 0))) . split tail (leng
 
 -- emparelhar as duas matrizes respetivas às filiais
 joinMatrices f1 f2 = foldr (\((f1l,f2l),(f1c,f2c)) acc -> (((f1 !! f1l) !! f1c)*((f2 !! f2l) !! f2c)):acc) [] l
+    where l = [((x,y), (k,z)) | x <- [0..12], y <- [0..12], k <- [0..12], z <- [0..12]]
+
+joinMatricesCost f1 f2 = foldr (\((f1l,f2l),(f1c,f2c)) acc -> (((f1 !! f1l) !! f1c)+((f2 !! f2l) !! f2c)):acc) [] l
     where l = [((x,y), (k,z)) | x <- [0..12], y <- [0..12], k <- [0..12], z <- [0..12]]
 
 -- subtrai os elementos da matriz lc por diff nos indices indicados pela
@@ -127,9 +130,10 @@ listMQPF q p f = map (flip (uncurry matrizQPF) f) $ zip q p
 recursiva = rec 0.001 (map singl $ replicate 169 0) p q
     where (p,q) = split (map fst) (map matrizQ) $ allTheMatrices
 
-rec :: Double -> Matriz Double -> [Matriz Double] -> [Matriz Double] -> Matriz Double
+rec :: Double -> Matriz Double -> [Matriz Double] -> [Matriz Double] -> ([Int], Double, Double)
 rec n f p q = if foo
-                 then dn calc f
+                 then let d = concat $ dn calc f
+                      in (map getMaxI . transpose $ map concat lista, maximum d, minimum d)
                  else rec n calc p q
     where
           lista = listMQPF q p f
@@ -138,3 +142,6 @@ rec n f p q = if foo
 
 dn :: Matriz Double -> Matriz Double -> Matriz Double
 dn = matrixSub
+
+getMaxI :: [Double] -> Int
+getMaxI inp = (\(a,b,c) -> a) . foldl (\(m,l,i) x -> if (x>l) then (i,x,succ i) else (m,l,succ i)) (0,0,0) $ inp
