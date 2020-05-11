@@ -1,4 +1,5 @@
---module Main where
+module Main where
+
 import Cp
 import Data.List
 import Data.List.Split (chunksOf)
@@ -23,7 +24,7 @@ filiais :: ((Matriz Double, Matriz Double), (Matriz Double, Matriz Double))
 filiais =  devides $ (unzip >< unzip) . unzip . map (\x -> foldr (\l acc -> con acc x l) ((0,0), (0,0)) states) $ states
     where states  = generateStates
           divide  = chunksOf 13
-          func ll = map (snd . f) $ ll
+          func    = map (snd . f)
           devides = (divide >< divide) >< (func . divide >< func . divide)
           f       = foldl (\(acc, l) x -> if acc > 8
                                              then (succ acc, l ++ [x - 10])
@@ -32,8 +33,8 @@ filiais =  devides $ (unzip >< unzip) . unzip . map (\x -> foldr (\l acc -> con 
 con acc@((acc1, acc2),(acc3, acc4)) (l,c) (p,e) = if plus (minus (l,p), e) == c then tuplo else acc
     where filial1 = acc1 + ((f1pp !! p) * (f1pe !! e))
           filial2 = acc2 + ((f2pp !! p) * (f2pe !! e))
-          custo1  = acc3 + ((f1pp !! p) * (f1pe !! e)) * 30 * (fromIntegral (min l p))
-          custo2  = acc4 + ((f2pp !! p) * (f2pe !! e)) * 30 * (fromIntegral (min l p))
+          custo1  = acc3 + ((f1pp !! p) * (f1pe !! e)) * 30 * fromIntegral (min l p)
+          custo2  = acc4 + ((f2pp !! p) * (f2pe !! e)) * 30 * fromIntegral (min l p)
           tuplo   = ((filial1, filial2), (custo1, custo2))
           condition = cond (> 8) (const 10) (const 0)
 
@@ -46,11 +47,11 @@ minus = cond ((>= 0) . uncurry (-)) (uncurry (-)) (const 0)
 -- emparelha as matrizes de ambas as filiais
 allTheMatrices :: [Par (Matriz Double)]
 allTheMatrices = uncurry zip . ((func joinMatrices) >< (func joinMatricesCost)) $ allShifts
-    where func f input = map (chunksOf 169 . uncurry f) $ input
+    where func f = map (chunksOf 169 . uncurry f)
 
 allShifts = (mp, mc')
-    where (mp, mc) = (generateAllMatrices >< generateAllMatrices) $ filiais
-          mc'      = (head $ mc) : subsCosts li (tail mc)
+    where (mp, mc) = (generateAllMatrices >< generateAllMatrices) filiais
+          mc'      = (head mc) : subsCosts li (tail mc)
           li       = allIndexes $ tail mp
 
 getNonZeroIndexes :: (Num a, Eq a) => [a] -> [Int]
@@ -85,8 +86,8 @@ joinMatricesCost f1 f2 = foldr (\((f1l,f2l),(f1c,f2c)) acc -> (((f1 !! f1l) !! f
 -- subtrai os elementos da matriz lc por diff nos indices indicados pela
 -- lista li
 replace li diff lc = chunksOf 13 . snd $ foo
-    where foo = foldl(\(acc,l) x -> if elem acc li
-                                       then (acc + 1, l ++ [x - fromIntegral(diff)])
+    where foo = foldl(\(acc,l) x -> if acc `elem` li
+                                       then (acc + 1, l ++ [x - fromIntegral diff])
                                        else (acc + 1, l ++ [x])) (0, []) $ concat lc
 
 
@@ -98,16 +99,16 @@ allIndexes = map (getNonZeroIndexes . concat >< getNonZeroIndexes . concat)
 -- pretendidos
 -- input:: [([Int], [Int])] -> [(Matriz Double, Matriz Double)]
 -- output :: [(Matriz Double)]
-subsCosts li lc = snd . foldl(\(acc, l) x -> if (acc < 3)
-                                                then fstTransfers li acc l x
-                                                else sndTransfers li acc l x) (0,[]) $ lc
-    where fstTransfers li acc l x = (acc + 1, l ++ [(replace (fst $ (!!) li acc) ((acc + 1) * 7) >< id) $ x])
-          sndTransfers li acc l x = (acc + 1, l ++ [(id >< replace (snd $ (!!) li acc) ((acc + 1 - 3) * 7)) $ x])
+subsCosts li = snd . foldl(\(acc, l) x -> if (acc < 3)
+                                             then fstTransfers li acc l x
+                                             else sndTransfers li acc l x) (0,[])
+    where fstTransfers li acc l x = (acc + 1, l ++ [(replace (fst $ (!!) li acc) ((acc + 1) * 7) >< id) x])
+          sndTransfers li acc l x = (acc + 1, l ++ [(id >< replace (snd $ (!!) li acc) ((acc + 1 - 3) * 7)) x])
 
 -- temos um par (probabilidades, custo)
 -- multiplicar por linhas as matrizes
 matrizQ :: Par (Matriz Double) -> Matriz Double
-matrizQ = map (singl . (\y -> foldr (\(a,b) acc -> acc + a*b) 1 y)) . map (uncurry zip) . uncurry zip
+matrizQ = map (singl . (foldr (\(a,b) acc -> acc + a*b) 1) . uncurry zip) . uncurry zip
 
 matrixMult :: Par (Matriz Double) -> Matriz Double
 matrixMult = toLists . (uncurry multStd) . (fromLists >< fromLists)
@@ -127,21 +128,38 @@ matrizF = map (singl . maximum) . transpose
 -- lista de matrizes QPF
 listMQPF q p f = map (flip (uncurry matrizQPF) f) $ zip q p
 
-recursiva = rec 0.001 (map singl $ replicate 169 0) p q
-    where (p,q) = split (map fst) (map matrizQ) $ allTheMatrices
+recursiva = rec 0.001 (replicate 169 (singl 0)) p q
+    where (p,q) = split (map fst) (map matrizQ) allTheMatrices
 
 rec :: Double -> Matriz Double -> [Matriz Double] -> [Matriz Double] -> ([Int], Double, Double)
 rec n f p q = if foo
                  then let d = concat $ dn calc f
                       in (map getMaxI . transpose $ map concat lista, maximum d, minimum d)
                  else rec n calc p q
-    where
-          lista = listMQPF q p f
-          calc  = matrizF $ map (map head) $ lista
+    where lista = listMQPF q p f
+          calc  = matrizF $ map (map head) lista
           foo   = (< n) . (uncurry (-)) . (split maximum minimum) . concat $ dn calc f
 
 dn :: Matriz Double -> Matriz Double -> Matriz Double
 dn = matrixSub
 
 getMaxI :: [Double] -> Int
-getMaxI inp = (\(a,b,c) -> a) . foldl (\(m,l,i) x -> if (x>l) then (i,x,succ i) else (m,l,succ i)) (0,0,0) $ inp
+getMaxI = (\(a,b,c) -> a) . foldl (\(m,l,i) x -> if (x>l) then (i,x,succ i) else (m,l,succ i)) (0,0,0)
+
+main :: IO ()
+main = do
+    let l = allTheMatrices
+    appendFile "probnaofazernada.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . fst . head $ l
+    appendFile "lucronaofazernada.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . snd . head $ l
+    appendFile "probtransf1c1p2.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . fst . flip (!!) 1 $ l
+    appendFile "lucrotransf1c1p2.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . snd . flip (!!) 1 $ l
+    appendFile "probtransf2c1p2.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . fst . flip (!!) 2 $ l
+    appendFile "lucrotransf2c1p2.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . snd . flip (!!) 2 $ l
+    appendFile "probtransf3c1p2.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . fst . flip (!!) 3 $ l
+    appendFile "lucrotransf3c1p2.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . snd . flip (!!) 3 $ l
+    appendFile "probtransf1c2p1.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . fst . flip (!!) 4 $ l
+    appendFile "lucrotransf1c2p1.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . snd . flip (!!) 4 $ l
+    appendFile "probtransf2c2p1.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . fst . flip (!!) 5 $ l
+    appendFile "lucrotransf2c2p1.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . snd . flip (!!) 5 $ l
+    appendFile "probtransf3c2p1.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . fst . flip (!!) 6 $ l
+    appendFile "lucrotransf3c2p1.csv" . show . concat . map (flip (++) "\n" . concat . map (\x -> show x ++[','])) . snd . flip (!!) 6 $ l
